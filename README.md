@@ -44,6 +44,30 @@ A matching `docker-compose.yaml` is included in the repository.
 - `/media` is the default path for files you want to expose to RcloneBrowser.
 - rclone uses `/config/rclone/rclone.conf` by default through `RCLONE_CONFIG`.
 
+## Security
+
+The browser and VNC interfaces provide access to configured remotes and mounted files. Do not expose ports `5800` or `5900` directly to an untrusted network. Prefer a trusted LAN, VPN, or a reverse proxy with TLS and authentication. The jlesage base image also supports its built-in web authentication and secure-connection options.
+
+Treat `/config/rclone/rclone.conf` as a secret because it can contain credentials or access tokens. Never commit `/config`, exported rclone configuration, passwords, or tokens to this repository.
+
+Only grant extra container privileges when required. In particular, `SYS_ADMIN` and `/dev/fuse` are intentionally absent from the default configuration because they materially increase container privileges.
+
+Keep the image updated so scheduled rebuilds can pick up current base-image and rclone fixes.
+
+## Data loss and destructive operations
+
+RcloneBrowser can invoke rclone operations that delete, move, overwrite, or synchronize files on both local and remote storage. A mistaken source, destination, or sync direction can cause irreversible data loss.
+
+Before using destructive operations:
+
+- test with disposable data or a read-only remote first;
+- use rclone dry-run functionality where the selected operation supports it;
+- verify the source, destination, filters, and sync direction;
+- keep independent backups or snapshots for important data;
+- avoid granting write access to remotes that do not need it.
+
+The container does not add a safety layer around rclone commands; RcloneBrowser and rclone have the same access that you grant through mounted volumes and configured remotes.
+
 ## Rclone mounts
 
 If you use `rclone mount`, the container needs access to FUSE. Add this only when you actually need mounts:
@@ -74,6 +98,23 @@ docker buildx build --load \
   --build-arg RCLONE_VERSION=1.75.0 \
   -t rclonebrowser:local .
 ```
+
+`RCLONE_VERSION=current` uses rclone's official current-download alias. A numeric version such as `1.75.0` is downloaded from the matching immutable GitHub release asset.
+
+## Testing
+
+Pull requests against `master` run the same multi-architecture Docker build used for publishing, but with `push: false`. This validates both `linux/amd64` and `linux/arm64` without publishing an image.
+
+Before treating a release as production-ready, verify at minimum:
+
+- the container starts and the browser UI is reachable on port `5800`;
+- `/config` persists RcloneBrowser settings and the rclone configuration across restarts;
+- a small upload and download work against a disposable test remote;
+- transferred size, total size, bandwidth, ETA, transfer counts and per-file progress update in the Jobs view;
+- FUSE mounts work only when the optional FUSE privileges are enabled;
+- destructive operations are tested only against disposable data first.
+
+Do not interpret a successful image build as proof that a particular remote provider or destructive workflow is safe. Provider-specific behavior should be tested with non-critical data.
 
 ## Architecture
 
