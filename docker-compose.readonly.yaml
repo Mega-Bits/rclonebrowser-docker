@@ -1,0 +1,5 @@
+services:
+  rclonebrowser:
+    volumes:
+      - ./config:/config
+      - ./media:/media:ro

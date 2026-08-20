@@ -8,7 +8,7 @@ RcloneBrowser in a maintained Docker image with web/VNC access. The image builds
 ghcr.io/mega-bits/rclonebrowser-docker:latest
 ```
 
-The GitHub Actions workflow validates pull requests, then rebuilds and publishes the image on every push to `master`, once every 24 hours, and on manual dispatch. Every build publishes these tags:
+The GitHub Actions workflow validates the image before publishing it on every push to `master`, once every 24 hours, and on manual dispatch. Every build publishes these tags:
 
 - `latest`
 - the repository version from `VERSION` (for example `v5.0.0`)
@@ -20,12 +20,23 @@ The scheduled build resolves the newest stable rclone release before building, s
 
 ## Run
 
+The included `docker-compose.yaml` binds the web and VNC ports to localhost by default and enables `no-new-privileges`:
+
+```bash
+docker compose up -d
+```
+
+Open `http://127.0.0.1:5800` on the Docker host. Port `5900` is optional and only needed for a native VNC client.
+
+For direct `docker run`, use the same hardened network defaults:
+
 ```bash
 docker run -d \
   --name rclonebrowser \
   --restart unless-stopped \
-  -p 5800:5800 \
-  -p 5900:5900 \
+  --security-opt no-new-privileges:true \
+  -p 127.0.0.1:5800:5800 \
+  -p 127.0.0.1:5900:5900 \
   -e USER_ID=1000 \
   -e GROUP_ID=1000 \
   -e TZ=Europe/Amsterdam \
@@ -34,9 +45,7 @@ docker run -d \
   ghcr.io/mega-bits/rclonebrowser-docker:latest
 ```
 
-Open `http://<docker-host>:5800` for the browser UI. Port `5900` is optional and only needed for a native VNC client.
-
-A matching `docker-compose.yaml` is included in the repository.
+If remote access is required, prefer a VPN, SSH tunnel, or an authenticated TLS reverse proxy rather than changing the bindings to `0.0.0.0`.
 
 ## Persistent data
 
@@ -44,9 +53,27 @@ A matching `docker-compose.yaml` is included in the repository.
 - `/media` is the default path for files you want to expose to RcloneBrowser.
 - rclone uses `/config/rclone/rclone.conf` by default through `RCLONE_CONFIG`.
 
+## Read-only local data mode
+
+If you only need to browse or copy data *from* local storage, use the included read-only compose overlay:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.readonly.yaml up -d
+```
+
+It changes the local media mount to:
+
+```yaml
+volumes:
+  - ./config:/config
+  - ./media:/media:ro
+```
+
+This prevents the container from modifying files under `/media`. It does not make configured cloud/remotes read-only; their permissions are controlled by the credentials and provider configuration in `rclone.conf`. It also prevents copying or moving files *to* `/media`, so use the normal compose file when local writes are intentionally required.
+
 ## Security
 
-The browser and VNC interfaces provide access to configured remotes and mounted files. Do not expose ports `5800` or `5900` directly to an untrusted network. Prefer a trusted LAN, VPN, or a reverse proxy with TLS and authentication. The jlesage base image also supports its built-in web authentication and secure-connection options.
+The browser and VNC interfaces provide access to configured remotes and mounted files. The default compose file therefore listens only on `127.0.0.1` and uses Docker's `no-new-privileges` option. Do not expose ports `5800` or `5900` directly to an untrusted network.
 
 Treat `/config/rclone/rclone.conf` as a secret because it can contain credentials or access tokens. Never commit `/config`, exported rclone configuration, passwords, or tokens to this repository.
 
@@ -56,7 +83,7 @@ Keep the image updated so scheduled rebuilds can pick up current base-image and 
 
 ## Data loss and destructive operations
 
-RcloneBrowser can invoke rclone operations that delete, move, overwrite, or synchronize files on both local and remote storage. A mistaken source, destination, or sync direction can cause irreversible data loss.
+RcloneBrowser can invoke rclone operations that delete, move, overwrite, or synchronize files on both local and remote storage. A mistaken source, destination, or sync direction can cause irreversible data loss. No container image can make an intentionally destructive rclone command universally safe.
 
 Before using destructive operations:
 
@@ -99,22 +126,25 @@ docker buildx build --load \
   -t rclonebrowser:local .
 ```
 
-`RCLONE_VERSION=current` uses rclone's official current-download alias. A numeric version such as `1.75.0` is downloaded from the matching immutable GitHub release asset.
+`RCLONE_VERSION=current` uses rclone's official current-download alias. A numeric version such as `1.75.0` is downloaded from the matching versioned GitHub release asset. The build executes `rclone version` and rejects a numeric release if the installed binary does not report the requested version.
 
 ## Testing
 
-Pull requests against `master` run the same multi-architecture Docker build used for publishing, but with `push: false`. This validates both `linux/amd64` and `linux/arm64` without publishing an image.
+Before a multi-architecture image is published, GitHub Actions now builds a `linux/amd64` test image and performs runtime checks inside the resulting container. The disposable data-integrity suite in `tests/data-integrity.sh` exercises local rclone operations only inside a newly created `/tmp` directory and verifies file trees with SHA-256 manifests.
 
-Before treating a release as production-ready, verify at minimum:
+The CI currently checks:
 
-- the container starts and the browser UI is reachable on port `5800`;
-- `/config` persists RcloneBrowser settings and the rclone configuration across restarts;
-- a small upload and download work against a disposable test remote;
-- transferred size, total size, bandwidth, ETA, transfer counts and per-file progress update in the Jobs view;
-- FUSE mounts work only when the optional FUSE privileges are enabled;
-- destructive operations are tested only against disposable data first.
+- the `rclone`, `rclone-browser`, and startup binaries exist and are executable;
+- the installed rclone binary starts and reports its version;
+- local copy preserves the complete test fixture;
+- overwriting an existing destination produces the same SHA-256 file tree as the source;
+- move transfers the fixture and only removes the disposable source after the move;
+- sync produces the exact source file tree and removes only the deliberately created obsolete fixture file;
+- filenames with spaces, a UTF-8 filename, an empty file, nested paths, and a deterministic binary file;
+- the normal container starts with `no-new-privileges` and launches the `rclone-browser` process;
+- the final publish build still targets both `linux/amd64` and `linux/arm64`.
 
-Do not interpret a successful image build as proof that a particular remote provider or destructive workflow is safe. Provider-specific behavior should be tested with non-critical data.
+These checks cover the local disposable fixtures above. They do **not** certify provider-specific remotes, FUSE mounts, failure recovery, concurrent changes, or arbitrary destructive commands as data-loss safe. Important data should still have independent backups or snapshots.
 
 ## Architecture
 

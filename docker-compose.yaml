@@ -3,9 +3,11 @@ services:
     image: ghcr.io/mega-bits/rclonebrowser-docker:latest
     container_name: rclonebrowser
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
-      - "5800:5800"
-      - "5900:5900"
+      - "127.0.0.1:5800:5800"
+      - "127.0.0.1:5900:5900"
     environment:
       USER_ID: "1000"
       GROUP_ID: "1000"
