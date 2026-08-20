@@ -57,9 +57,9 @@ RUN add-pkg \
     && RCLONE_BIN="$(find /tmp/rclone -type f -name rclone -print -quit)" \
     && test -n "${RCLONE_BIN}" \
     && install -m 0755 "${RCLONE_BIN}" /usr/bin/rclone \
-    && /usr/bin/rclone version \
+    && env -u RCLONE_VERSION /usr/bin/rclone version \
     && if [ "${RCLONE_VERSION}" != "current" ]; then \
-         /usr/bin/rclone version | grep -Fqx "rclone v${RCLONE_VERSION}"; \
+         env -u RCLONE_VERSION /usr/bin/rclone version | grep -Fqx "rclone v${RCLONE_VERSION}"; \
        fi \
     && rm -rf /tmp/rclone /tmp/rclone.zip
 
