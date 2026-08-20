@@ -65,6 +65,7 @@ COPY rootfs/ /
 RUN chmod +x /startapp.sh \
     && set-cont-env APP_NAME "RcloneBrowser" \
     && set-cont-env APP_VERSION "${IMAGE_VERSION} (rclone ${RCLONE_VERSION})" \
+    && mkdir -p /etc/openbox \
     && printf '<Title>Rclone Browser</Title>\n<Type>normal</Type>\n' > /etc/openbox/main-window-selection.xml
 
 ENV RCLONE_CONFIG=/config/rclone/rclone.conf \
