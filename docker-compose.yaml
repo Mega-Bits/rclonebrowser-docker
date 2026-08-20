@@ -1,13 +1,17 @@
-rclonebrowser_service:
-    image: romancin/rclonebrowser:latest
+services:
+  rclonebrowser:
+    image: ghcr.io/mega-bits/rclonebrowser-docker:latest
     container_name: rclonebrowser
+    restart: unless-stopped
     ports:
-      - "5804:5800"
+      - "5800:5800"
+      - "5900:5900"
     environment:
-      - USER_ID=0
-      - GROUP_ID=0
-      - TZ=Europe/Madrid
-      - VNC_PASSWORD=password
+      USER_ID: "1000"
+      GROUP_ID: "1000"
+      TZ: Europe/Amsterdam
+      DISPLAY_WIDTH: "1600"
+      DISPLAY_HEIGHT: "900"
     volumes:
-      - "/share/Container/rclonebrowser:/config:rw"
-      - "/share/Container/rclonebrowser/shared:/shared:rw"
+      - ./config:/config
+      - ./media:/media
