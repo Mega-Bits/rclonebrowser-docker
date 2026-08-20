@@ -1,0 +1,4 @@
+/config/
+/media/
+/rclone.conf
+/.env
