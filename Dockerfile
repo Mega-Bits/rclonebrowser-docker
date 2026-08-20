@@ -46,11 +46,17 @@ RUN add-pkg \
         arm64) RCLONE_ARCH=arm64 ;; \
         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
        esac \
-    && curl -fsSLo /tmp/rclone.zip \
-        "https://downloads.rclone.org/rclone-${RCLONE_VERSION}-linux-${RCLONE_ARCH}.zip" \
+    && if [ "${RCLONE_VERSION}" = "current" ]; then \
+         RCLONE_URL="https://downloads.rclone.org/rclone-current-linux-${RCLONE_ARCH}.zip"; \
+       else \
+         RCLONE_URL="https://github.com/rclone/rclone/releases/download/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-${RCLONE_ARCH}.zip"; \
+       fi \
+    && curl --fail --show-error --location --retry 3 --output /tmp/rclone.zip "${RCLONE_URL}" \
     && mkdir -p /tmp/rclone \
     && unzip -q /tmp/rclone.zip -d /tmp/rclone \
-    && install -m 0755 /tmp/rclone/rclone-*-linux-${RCLONE_ARCH}/rclone /usr/bin/rclone \
+    && RCLONE_BIN="$(find /tmp/rclone -type f -name rclone -print -quit)" \
+    && test -n "${RCLONE_BIN}" \
+    && install -m 0755 "${RCLONE_BIN}" /usr/bin/rclone \
     && rm -rf /tmp/rclone /tmp/rclone.zip
 
 COPY --from=rclonebrowser-builder /build/build/rclone-browser /usr/bin/rclone-browser
@@ -69,4 +75,5 @@ VOLUME ["/config", "/media"]
 LABEL org.opencontainers.image.title="RcloneBrowser" \
       org.opencontainers.image.description="RcloneBrowser GUI container with current rclone and web/VNC access" \
       org.opencontainers.image.source="https://github.com/Mega-Bits/rclonebrowser-docker" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
