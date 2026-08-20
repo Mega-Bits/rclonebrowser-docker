@@ -47,6 +47,25 @@ docker run -d \
 
 If remote access is required, prefer a VPN, SSH tunnel, or an authenticated TLS reverse proxy rather than changing the bindings to `0.0.0.0`.
 
+## Health monitoring
+
+The image includes a Docker healthcheck. A container is considered healthy only when both conditions are true:
+
+- the exact `rclone-browser` process is running;
+- the local web UI on port `5800` accepts a connection over HTTP or HTTPS.
+
+The web probe intentionally does not require a `2xx` status code, because authentication can legitimately return another HTTP status while the service itself is healthy. HTTPS is probed with certificate verification disabled only against `127.0.0.1`, so a locally generated certificate does not create false failures.
+
+The healthcheck is read-only and does not invoke rclone operations, access configured remotes, or modify `/config` or `/media`.
+
+Check the current state with:
+
+```bash
+docker inspect --format '{{.State.Health.Status}}' rclonebrowser
+```
+
+The image uses a 45-second startup grace period, a 30-second interval, a 6-second timeout, and marks the container unhealthy after three consecutive failed checks.
+
 ## Persistent data
 
 - `/config` stores RcloneBrowser settings and the rclone configuration.
@@ -134,14 +153,14 @@ Before a multi-architecture image is published, GitHub Actions now builds a `lin
 
 The CI currently checks:
 
-- the `rclone`, `rclone-browser`, and startup binaries exist and are executable;
+- the `rclone`, `rclone-browser`, startup, and healthcheck binaries exist and are executable;
 - the installed rclone binary starts and reports its version;
 - local copy preserves the complete test fixture;
 - overwriting an existing destination produces the same SHA-256 file tree as the source;
 - move transfers the fixture and only removes the disposable source after the move;
 - sync produces the exact source file tree and removes only the deliberately created obsolete fixture file;
 - filenames with spaces, a UTF-8 filename, an empty file, nested paths, and a deterministic binary file;
-- the normal container starts with `no-new-privileges` and launches the `rclone-browser` process;
+- the normal container starts with `no-new-privileges` and reaches Docker's `healthy` state through the same healthcheck shipped in the image;
 - the final publish build still targets both `linux/amd64` and `linux/arm64`.
 
 These checks cover the local disposable fixtures above. They do **not** certify provider-specific remotes, FUSE mounts, failure recovery, concurrent changes, or arbitrary destructive commands as data-loss safe. Important data should still have independent backups or snapshots.

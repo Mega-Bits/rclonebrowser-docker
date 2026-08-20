@@ -66,7 +66,7 @@ RUN add-pkg \
 COPY --from=rclonebrowser-builder /build/build/rclone-browser /usr/bin/rclone-browser
 COPY rootfs/ /
 
-RUN chmod +x /startapp.sh \
+RUN chmod +x /startapp.sh /healthcheck.sh \
     && set-cont-env APP_NAME "RcloneBrowser" \
     && set-cont-env APP_VERSION "${IMAGE_VERSION} (rclone ${RCLONE_VERSION})" \
     && mkdir -p /etc/openbox \
@@ -74,6 +74,8 @@ RUN chmod +x /startapp.sh \
 
 ENV RCLONE_CONFIG=/config/rclone/rclone.conf \
     QT_X11_NO_MITSHM=1
+
+HEALTHCHECK --interval=30s --timeout=6s --start-period=45s --retries=3 CMD ["/healthcheck.sh"]
 
 VOLUME ["/config", "/media"]
 

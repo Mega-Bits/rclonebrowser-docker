@@ -96,6 +96,7 @@ jobs:
             test -x /usr/bin/rclone-browser
             test -x /usr/bin/rclone
             test -x /startapp.sh
+            test -x /healthcheck.sh
             /usr/bin/rclone version
           '
           docker run --rm \
@@ -104,12 +105,16 @@ jobs:
             rclonebrowser:ci-test \
             -ec '/bin/sh /tests/data-integrity.sh'
 
-      - name: Smoke-test container startup
+      - name: Smoke-test container health
         shell: bash
         run: |
           set -euo pipefail
           cid="$(docker run -d \
             --security-opt no-new-privileges:true \
+            --health-interval=2s \
+            --health-timeout=5s \
+            --health-start-period=5s \
+            --health-retries=5 \
             -e USER_ID=1000 \
             -e GROUP_ID=1000 \
             rclonebrowser:ci-test)"
@@ -119,20 +124,37 @@ jobs:
           }
           trap cleanup EXIT
 
-          found=0
-          for _ in $(seq 1 30); do
-            if [ "$(docker inspect -f '{{.State.Running}}' "$cid")" != "true" ]; then
-              echo "Container stopped before RcloneBrowser started" >&2
+          health="starting"
+          for _ in $(seq 1 45); do
+            running="$(docker inspect -f '{{.State.Running}}' "$cid")"
+            if [ "$running" != "true" ]; then
+              echo "Container stopped before becoming healthy" >&2
               exit 1
             fi
-            if docker top "$cid" -eo comm,args | grep -q '[r]clone-browser'; then
-              found=1
-              break
-            fi
+
+            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$cid")"
+            case "$health" in
+              healthy)
+                break
+                ;;
+              starting)
+                ;;
+              unhealthy)
+                echo "Container healthcheck reported unhealthy" >&2
+                docker inspect -f '{{range .State.Health.Log}}{{println .Output}}{{end}}' "$cid" >&2 || true
+                exit 1
+                ;;
+              *)
+                echo "Docker healthcheck is missing or returned unexpected status: $health" >&2
+                exit 1
+                ;;
+            esac
             sleep 1
           done
-          [ "$found" -eq 1 ] || {
-            echo "rclone-browser process did not start" >&2
+
+          [ "$health" = "healthy" ] || {
+            echo "Container did not become healthy in time" >&2
+            docker inspect -f '{{range .State.Health.Log}}{{println .Output}}{{end}}' "$cid" >&2 || true
             exit 1
           }
 
